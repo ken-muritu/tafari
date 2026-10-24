@@ -1,0 +1,35 @@
+# Build artifacts
+whatsapp-bot
+*.exe
+
+# WhatsApp session (account credentials). Never commit it.
+whatsapp.db
+whatsapp.db-*
+
+# Logs / temp
+*.log
+qr.png
+qr.txt
+pairing-code.txt
+run.log
+listen.log
+
+# build helper
+/cktool/
+
+# --- secrets and local data (never commit) ---
+.env
+.env.*
+*.env
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+.vercel/
+node_modules/

@@ -1,0 +1,16 @@
+*.db
+*.exe
+*.log
+.env
+.env.*
+/cktool/
+listen.log
+pairing-code.txt
+qr.png
+qr.txt
+run.log
+whatsapp-bot
+whatsapp.db
+whatsapp.db-*
+whatsapp.db-shm
+whatsapp.db-wal

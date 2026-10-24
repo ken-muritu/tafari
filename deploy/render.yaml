@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: tafari
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: TAFARI_DATA_DIR
+        value: /app/data
+      - key: AGENT_FORMAT
+        value: openai
+      - key: AGENT_BASE_URL
+        value: https://openrouter.ai/api/v1/chat/completions
+      - key: AGENT_MODEL
+        value: openai/gpt-4o-mini
+      - key: AGENT_API_KEY
+        sync: false   # set this secret in the Render dashboard (OpenRouter key)
+      - key: PORT
+        value: 8080
