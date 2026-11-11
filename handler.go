@@ -154,6 +154,18 @@ func handleMessage(m *events.Message) {
 	case "ping":
 		reply(m.Info.Chat, "pong")
 		return
+	case "male voice", "voice male", "use male voice":
+		if maleVoice() == "" {
+			reply(m.Info.Chat, signature+"The male voice isn't set up yet.")
+			return
+		}
+		setPrefMale(chat, true)
+		reply(m.Info.Chat, signature+"Okay, I'll use the male voice for voice notes in this chat.")
+		return
+	case "female voice", "voice female", "use female voice":
+		setPrefMale(chat, false)
+		reply(m.Info.Chat, signature+"Okay, back to my usual voice.")
+		return
 	case "reset", "forget", "start over":
 		forget(chat)
 		reply(m.Info.Chat, signature+"Done, I've cleared our conversation.")
@@ -200,7 +212,12 @@ func handleMessage(m *events.Message) {
 			return
 		}
 		if wantVoice && voiceEnabled() {
-			if ogg, err := speak(answer); err == nil {
+			vid, male := voiceFor(chat)
+			spoken := answer
+			if male { // Ken's own cloned voice: always say it is the assistant, never pass as Ken
+				spoken = "Tafari here, Ken's AI assistant. " + answer
+			}
+			if ogg, err := speak(spoken, vid); err == nil {
 				if err := sendVoiceNoteTracked(ctx, m.Info.Chat, ogg); err == nil {
 					return
 				}

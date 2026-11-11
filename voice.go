@@ -25,8 +25,17 @@ import (
 
 func elevenKey() string { return strings.TrimSpace(os.Getenv("ELEVENLABS_API_KEY")) }
 
-// tafariVoice is the female voice Ken picks; set TAFARI_VOICE_ID.
+// Tafari's default (female) voice is TAFARI_VOICE_ID; the optional male voice (Ken's own clone)
+// is TAFARI_VOICE_ID_MALE. Each chat can switch with "male voice" / "female voice".
 func tafariVoice() string { return strings.TrimSpace(os.Getenv("TAFARI_VOICE_ID")) }
+func maleVoice() string   { return strings.TrimSpace(os.Getenv("TAFARI_VOICE_ID_MALE")) }
+
+func voiceFor(chat string) (id string, male bool) {
+	if prefMale(chat) && maleVoice() != "" {
+		return maleVoice(), true
+	}
+	return tafariVoice(), false
+}
 
 func voiceEnabled() bool { return elevenKey() != "" && tafariVoice() != "" }
 
@@ -60,14 +69,14 @@ func transcribe(audio []byte) (string, error) {
 	return strings.TrimSpace(out.Text), nil
 }
 
-// speak turns text into an Ogg Opus voice note in Tafari's voice.
-func speak(text string) ([]byte, error) {
+// speak turns text into an Ogg Opus voice note in the given voice.
+func speak(text, voiceID string) ([]byte, error) {
 	payload, _ := json.Marshal(map[string]any{
 		"text":           text,
 		"model_id":       envOr("TAFARI_TTS_MODEL", "eleven_flash_v2_5"),
 		"voice_settings": map[string]any{"stability": 0.5, "similarity_boost": 0.8},
 	})
-	url := "https://api.elevenlabs.io/v1/text-to-speech/" + tafariVoice() + "?output_format=opus_48000_64"
+	url := "https://api.elevenlabs.io/v1/text-to-speech/" + voiceID + "?output_format=opus_48000_64"
 	req, _ := http.NewRequest("POST", url, bytes.NewReader(payload))
 	req.Header.Set("xi-api-key", elevenKey())
 	req.Header.Set("Content-Type", "application/json")

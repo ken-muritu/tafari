@@ -22,7 +22,8 @@ Built and deployed in August 2026, running in a container on Render.
 | Variable | Purpose |
 |---|---|
 | `ELEVENLABS_API_KEY` | Speech-to-text and text-to-speech |
-| `TAFARI_VOICE_ID` | Tafari's (female) ElevenLabs voice |
+| `TAFARI_VOICE_ID` | Tafari's default voice (female, designed: "Tafari") |
+| `TAFARI_VOICE_ID_MALE` | Optional male voice (Ken's clone). Chats switch with `male voice` / `female voice`; voice notes in Ken's voice always open with "Tafari here, Ken's AI assistant". |
 | `TAFARI_ALLOW` | `all` (default), `ken`, or comma list of phone numbers allowed to tag her |
 | `TAFARI_TTS_MODEL` / `TAFARI_STT_MODEL` | Defaults `eleven_flash_v2_5` / `scribe_v1` |
 

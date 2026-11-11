@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/binary"
 	"strings"
 	"testing"
@@ -62,5 +63,31 @@ func TestRateLimit(t *testing.T) {
 	}
 	if underLimit(chat) {
 		t.Fatal("13th call within an hour should be limited")
+	}
+}
+
+func TestVoicePreferencePerChat(t *testing.T) {
+	db, err := sql.Open("sqlite", "file::memory:?cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := initMemory(db); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TAFARI_VOICE_ID", "female-id")
+	t.Setenv("TAFARI_VOICE_ID_MALE", "male-id")
+	if id, male := voiceFor("a"); id != "female-id" || male {
+		t.Fatalf("default should be female, got %s %v", id, male)
+	}
+	setPrefMale("a", true)
+	if id, male := voiceFor("a"); id != "male-id" || !male {
+		t.Fatalf("chat a should be male, got %s %v", id, male)
+	}
+	if id, _ := voiceFor("b"); id != "female-id" {
+		t.Fatal("other chats keep the default")
+	}
+	setPrefMale("a", false)
+	if _, male := voiceFor("a"); male {
+		t.Fatal("switch back failed")
 	}
 }

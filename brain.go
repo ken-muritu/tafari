@@ -63,6 +63,9 @@ func initMemory(db *sql.DB) error {
 	if err == nil {
 		_, err = db.Exec(`CREATE INDEX IF NOT EXISTS tafari_turns_chat ON tafari_turns(chat, id)`)
 	}
+	if err == nil {
+		_, err = db.Exec(`CREATE TABLE IF NOT EXISTS tafari_prefs (chat TEXT PRIMARY KEY, male INTEGER NOT NULL DEFAULT 0)`)
+	}
 	return err
 }
 
@@ -91,6 +94,23 @@ func remember(chat, role, content string) {
 }
 
 func forget(chat string) { _, _ = memDB.Exec(`DELETE FROM tafari_turns WHERE chat = ?`, chat) }
+
+// Per-chat voice preference ("male" uses Ken's cloned voice).
+func setPrefMale(chat string, male bool) {
+	v := 0
+	if male {
+		v = 1
+	}
+	_, _ = memDB.Exec(`INSERT INTO tafari_prefs(chat, male) VALUES (?, ?) ON CONFLICT(chat) DO UPDATE SET male = excluded.male`, chat, v)
+}
+
+func prefMale(chat string) bool {
+	var v int
+	if memDB.QueryRow(`SELECT male FROM tafari_prefs WHERE chat = ?`, chat).Scan(&v) != nil {
+		return false
+	}
+	return v == 1
+}
 
 // ask sends persona + recent history + the new message to the configured model.
 // Content is never logged; only sizes and status.
