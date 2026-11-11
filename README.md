@@ -11,6 +11,21 @@ Built and deployed in August 2026, running in a container on Render.
 - Messages you send yourself are handled too, so you can tag `@tafari` from your own chats.
 - A small HTTP server exposes `GET /healthz` for the host's health check. The process also pings it periodically to stay awake.
 
+## v2 (Nov 2026): Ken's personal assistant
+
+- **Persona and knowledge** live in `knowledge/*.md` (embedded at build time): who Tafari is, the rules she never breaks (always says she's an AI, never commits Ken to deals, never shares private data), facts about Ken, and his services and prices.
+- **Where she answers:** everything in Ken's own "Message yourself" chat; in any other chat only when tagged `@tafari` (or "tafari," / "tafari:") and the sender passes `TAFARI_ALLOW`. Other chats are rate limited (12 replies per hour).
+- **Memory:** the last 12 turns per chat, kept in the same SQLite file (`tafari_turns`). Send `reset` to clear a chat.
+- **Voice:** voice notes in Ken's chat are transcribed (ElevenLabs Scribe); Tafari replies by voice note when you sent one, or when you start with `voice ...`. ElevenLabs returns Ogg Opus, so no ffmpeg.
+- **Privacy:** message contents are never logged (`TAFARI_DEBUG=1` logs sizes only).
+
+| Variable | Purpose |
+|---|---|
+| `ELEVENLABS_API_KEY` | Speech-to-text and text-to-speech |
+| `TAFARI_VOICE_ID` | Tafari's (female) ElevenLabs voice |
+| `TAFARI_ALLOW` | `all` (default), `ken`, or comma list of phone numbers allowed to tag her |
+| `TAFARI_TTS_MODEL` / `TAFARI_STT_MODEL` | Defaults `eleven_flash_v2_5` / `scribe_v1` |
+
 ## How it works
 
 - **WhatsApp:** whatsmeow over WebSocket. The linked-device session is stored in SQLite (`whatsapp.db`, pure-Go `modernc.org/sqlite`, WAL mode).

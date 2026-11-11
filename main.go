@@ -1,9 +1,10 @@
 // whatsapp-bot — minimal whatsmeow example.
 //
 // Pairing modes:
-//   go run .                                  # QR pairing (scan the printed QR)
-//   go run . -phone +254****4826             # phone-number pairing (type the shown code into WA)
-//   go run . -send +155****4567 -message "hi" # send one message and exit
+//
+//	go run .                                  # QR pairing (scan the printed QR)
+//	go run . -phone +254****4826             # phone-number pairing (type the shown code into WA)
+//	go run . -send +155****4567 -message "hi" # send one message and exit
 //
 // After pairing, session is saved to whatsapp.db and you just run `go run .` to reconnect.
 package main
@@ -11,13 +12,10 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"io"
-	"net/http"
-	"bytes"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -45,13 +43,14 @@ var cli *whatsmeow.Client
 // OpenAI-compatible provider (OpenRouter/Groq/OpenAI) by setting AGENT_FORMAT=openai.
 //
 // Env vars:
-//   AGENT_FORMAT   "anthropic" (default) or "openai"
-//   AGENT_BASE_URL full URL to the messages endpoint
-//                  anthropic default: https://agentrouter.org/v1/messages
-//                  openai default:    https://openrouter.ai/api/v1/chat/completions
-//   AGENT_API_KEY  your provider key
-//   AGENT_MODEL    model name (e.g. claude-opus-4-6 or openai/gpt-4o-mini)
-//   AGENTROUTER_API_KEY is accepted as a fallback for AGENT_API_KEY.
+//
+//	AGENT_FORMAT   "anthropic" (default) or "openai"
+//	AGENT_BASE_URL full URL to the messages endpoint
+//	               anthropic default: https://agentrouter.org/v1/messages
+//	               openai default:    https://openrouter.ai/api/v1/chat/completions
+//	AGENT_API_KEY  your provider key
+//	AGENT_MODEL    model name (e.g. claude-opus-4-6 or openai/gpt-4o-mini)
+//	AGENTROUTER_API_KEY is accepted as a fallback for AGENT_API_KEY.
 func agentBaseURL() string {
 	if v := os.Getenv("AGENT_BASE_URL"); v != "" {
 		return v
@@ -149,6 +148,10 @@ func main() {
 	sqlDB.SetMaxIdleConns(1)
 	if _, err := sqlDB.Exec("PRAGMA busy_timeout=5000"); err != nil {
 		log.Printf("warning: failed to set busy_timeout: %v", err)
+	}
+
+	if err := initMemory(sqlDB); err != nil {
+		log.Fatalf("failed to init memory: %v", err)
 	}
 
 	container, err := sqlstore.New(ctx, "sqlite", dbPath, dbLog)
@@ -295,153 +298,6 @@ func eventHandler(evt interface{}) {
 	case *events.PairSuccess:
 		log.Println("event: pairing successful! ✅")
 	}
-}
-
-func handleMessage(m *events.Message) {
-	// We do NOT skip IsFromMe, so you can tag @tafari from your own chats too.
-	var body string
-	if m.Message != nil && m.Message.GetConversation() != "" {
-		body = m.Message.GetConversation()
-	}
-	if body == "" {
-		return
-	}
-	fmt.Printf("<- %s: %s\n", m.Info.Sender.String(), body)
-
-	clean := strings.ToLower(strings.TrimSpace(body))
-
-	// Always-available shortcuts (no AI needed).
-	switch clean {
-	case "ping":
-		reply(m.Info.Chat, "pong")
-		return
-	case "time":
-		reply(m.Info.Chat, "server time: "+time.Now().Format(time.RFC1123))
-		return
-	case "@tafari", "tafari":
-		reply(m.Info.Chat, "\U0001F916 Tafari here. Ask me anything after @tafari, e.g. '@tafari what is 17*23?'")
-		return
-	}
-
-	// Only engage the AI when explicitly tagged @tafari (stays silent otherwise).
-	if !strings.Contains(clean, "@tafari") && !strings.Contains(clean, "tafari:") {
-		return
-	}
-	prompt := strings.Replace(body, "@tafari", "", -1)
-	prompt = strings.TrimSpace(strings.TrimLeft(prompt, ":"))
-
-	go func() {
-		answer, err := askAgent(prompt)
-		if err != nil {
-			log.Printf("agent error: %v", err)
-			reply(m.Info.Chat, "\U0001F916 Tafari couldn't reach the AI service: "+err.Error())
-			return
-		}
-		reply(m.Info.Chat, "\U0001F916 Tafari: "+answer)
-	}()
-}
-
-func reply(jid types.JID, text string) {
-	if _, err := cli.SendMessage(context.Background(), jid, newText(text)); err != nil {
-		log.Printf("failed to reply: %v", err)
-	}
-}
-
-// askAgent calls the configured AI backend and returns the model's text reply.
-// The API key is read from AGENT_API_KEY (fallback AGENTROUTER_API_KEY) — never hardcoded.
-func askAgent(prompt string) (string, error) {
-	apiKey := agentKey()
-	if apiKey == "" {
-		return "", fmt.Errorf("no AI API key set (AGENT_API_KEY / AGENTROUTER_API_KEY)")
-	}
-	format := agentFormat()
-	base := agentBaseURL()
-	model := agentModel()
-	log.Printf("[agent] calling %s format=%s model=%s prompt=%q", base, format, model, prompt)
-
-	var payload []byte
-	if format == "openai" {
-		payload, _ = json.Marshal(map[string]interface{}{
-			"model":    model,
-			"messages": []map[string]string{{"role": "user", "content": prompt}},
-		})
-	} else {
-		payload, _ = json.Marshal(map[string]interface{}{
-			"model":      model,
-			"max_tokens": 1024,
-			"messages":   []map[string]string{{"role": "user", "content": prompt}},
-		})
-	}
-
-	req, err := http.NewRequest("POST", base, bytes.NewReader(payload))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	if format != "openai" {
-		req.Header.Set("anthropic-version", "2023-06-01")
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	bodyStr := string(bodyBytes)
-	log.Printf("[agent] HTTP %d response=%q", resp.StatusCode, truncate(bodyStr, 300))
-	if resp.StatusCode != http.StatusOK {
-		if strings.Contains(bodyStr, "blocked") || strings.Contains(bodyStr, "405") || strings.Contains(bodyStr, "<!doctype") {
-			return "", fmt.Errorf("request blocked by a WAF/proxy in front of the AI endpoint (HTTP %d). The provider likely geo-blocks Render's IP", resp.StatusCode)
-		}
-		return "", fmt.Errorf("agent HTTP %d: %s", resp.StatusCode, bodyStr)
-	}
-
-	if format == "openai" {
-		var out struct {
-			Choices []struct {
-				Message struct {
-					Content string `json:"content"`
-				} `json:"message"`
-			} `json:"choices"`
-		}
-		if err := json.Unmarshal(bodyBytes, &out); err != nil {
-			return "", fmt.Errorf("failed to parse agent response: %w", err)
-		}
-		if len(out.Choices) == 0 {
-			return "(no text in response)", nil
-		}
-		return out.Choices[0].Message.Content, nil
-	}
-
-	var out struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-	}
-	if err := json.Unmarshal(bodyBytes, &out); err != nil {
-		return "", fmt.Errorf("failed to parse agent response: %w", err)
-	}
-	var sb strings.Builder
-	for _, c := range out.Content {
-		if c.Type == "text" {
-			sb.WriteString(c.Text)
-		}
-	}
-	if sb.Len() == 0 {
-		return "(no text in response)", nil
-	}
-	return sb.String(), nil
 }
 
 func sendOnce(phone, text string) {
