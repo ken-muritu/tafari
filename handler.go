@@ -137,6 +137,12 @@ func handleMessage(m *events.Message) {
 	if self && audio != nil && sentByTafari(m.Info.ID) {
 		return
 	}
+	// Voice notes Ken records come from his phone (device 0). One sent from any
+	// linked device is Tafari's own, possibly from another running copy, so never
+	// transcribe and answer it (that is what makes two copies loop forever).
+	if fromLinkedDevice(m.Info.IsFromMe, m.Info.Sender, audio != nil) {
+		return
+	}
 
 	chat := m.Info.Chat.String()
 	if !self {
@@ -225,6 +231,12 @@ func handleMessage(m *events.Message) {
 		}
 		reply(m.Info.Chat, signature+answer)
 	}()
+}
+
+// fromLinkedDevice is true for an own-account audio message sent from a linked
+// device (device > 0) rather than from the phone.
+func fromLinkedDevice(isFromMe bool, sender types.JID, isAudio bool) bool {
+	return isFromMe && isAudio && sender.Device != 0
 }
 
 // Track Tafari's own voice-note message IDs so she doesn't answer herself in Ken's chat.
