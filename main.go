@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
 	"go.mau.fi/whatsmeow"
@@ -161,7 +162,13 @@ func main() {
 		log.Fatalf("failed to init memory: %v", err)
 	}
 
-	container, err := sqlstore.New(ctx, "sqlite", dbPath, dbLog)
+	// TAFARI_SESSION_DB_URL (a Postgres URL) keeps the WhatsApp login off the local
+	// disk, so hosts without a persistent disk (Render free) keep it across deploys.
+	storeDriver, storeDSN := "sqlite", dbPath
+	if u := strings.TrimSpace(os.Getenv("TAFARI_SESSION_DB_URL")); u != "" {
+		storeDriver, storeDSN = "pgx", u
+	}
+	container, err := sqlstore.New(ctx, storeDriver, storeDSN, dbLog)
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
