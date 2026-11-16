@@ -329,11 +329,31 @@ func eventHandler(evt interface{}) {
 		}
 	case *events.Disconnected:
 		log.Println("event: disconnected from WhatsApp")
+	case *events.StreamReplaced:
+		// During a Render deploy/restart the old and new instance briefly share one login
+		// and WhatsApp drops one of them; whatsmeow does not reconnect after this.
+		log.Println("event: stream replaced — reconnecting shortly")
+		go reconnectAfterReplace()
 	case *events.LoggedOut:
 		log.Println("event: logged out — delete whatsapp.db and re-pair")
 	case *events.PairSuccess:
 		log.Println("event: pairing successful! ✅")
 	}
+}
+
+// reconnectAfterReplace waits for the other instance to exit, then reconnects.
+func reconnectAfterReplace() {
+	for i := 0; i < 8; i++ {
+		time.Sleep(15 * time.Second)
+		if cli.IsConnected() {
+			return
+		}
+		if err := cli.Connect(); err == nil {
+			log.Println("reconnected after replaced stream")
+			return
+		}
+	}
+	log.Println("could not reconnect after replaced stream")
 }
 
 func sendOnce(phone, text string) {
