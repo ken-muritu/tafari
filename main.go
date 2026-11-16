@@ -104,6 +104,7 @@ func main() {
 			_, _ = w.Write([]byte("ok"))
 		})
 		registerRoutes()
+		registerOTP()
 		addr := ":" + os.Getenv("PORT")
 		if addr == ":" {
 			addr = ":8080"
