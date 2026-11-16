@@ -123,7 +123,7 @@ func tagged(text string) (string, bool) {
 }
 
 func handleMessage(m *events.Message) {
-	if m.Message == nil {
+	if m.Message == nil || standbyHolding() {
 		return
 	}
 	self := isSelfChat(m)

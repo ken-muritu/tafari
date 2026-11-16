@@ -103,6 +103,7 @@ func main() {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		})
+		registerRoutes()
 		addr := ":" + os.Getenv("PORT")
 		if addr == ":" {
 			addr = ":8080"
@@ -126,6 +127,8 @@ func main() {
 			}
 		}
 	}()
+
+	startStandbyWatcher()
 
 	ctx := context.Background()
 	dbLog := waLog.Stdout("Database", "INFO", true)
@@ -223,6 +226,7 @@ func main() {
 		go func() {
 			for evt := range qrChan {
 				if evt.Event == "code" {
+					latestQR.Store(evt.Code)
 					printQR(evt.Code)
 					if png, err := qrcode.Encode(evt.Code, qrcode.Medium, 512); err == nil {
 						_ = os.WriteFile("qr.png", png, 0600)
