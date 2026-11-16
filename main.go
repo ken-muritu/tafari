@@ -36,6 +36,9 @@ import (
 
 var cli *whatsmeow.Client
 
+// qrReady fires on the first QR event in phone-code mode (socket is ready).
+var qrReady = make(chan struct{}, 1)
+
 // AgentRouter (Anthropic-compatible) config — key read from env at runtime.
 // AI backend config — all read from env at runtime so you can switch providers
 // without code changes. Defaults point at AgentRouter (Anthropic-compatible),
@@ -184,6 +187,25 @@ func main() {
 	}()
 	_ = qrConnected
 
+	// whatsmeow requires the QR channel to be requested BEFORE Connect.
+	var qrChan <-chan whatsmeow.QRChannelItem
+	if cli.Store.ID == nil {
+		qrChan, _ = cli.GetQRChannel(ctx)
+		if *pairPhone != "" && qrChan != nil {
+			// Phone-code mode ignores the QR itself; the first event means the
+			// socket is ready for PairPhone. Keep draining so the channel never blocks.
+			go func() {
+				for evt := range qrChan {
+					if evt.Event == "code" {
+						select {
+						case qrReady <- struct{}{}:
+						default:
+						}
+					}
+				}
+			}()
+		}
+	}
 	if err := cli.Connect(); err != nil {
 		log.Fatalf("failed to connect: %v", err)
 	}
@@ -197,8 +219,7 @@ func main() {
 	}
 
 	// QR pairing mode.
-	if cli.Store.ID == nil {
-		qrChan, _ := cli.GetQRChannel(ctx)
+	if cli.Store.ID == nil && qrChan != nil {
 		go func() {
 			for evt := range qrChan {
 				if evt.Event == "code" {
@@ -227,6 +248,8 @@ func pairViaPhone(ctx context.Context, phone string) {
 	select {
 	case <-connectedSig:
 		log.Println("connected - requesting pairing code")
+	case <-qrReady:
+		log.Println("socket ready - requesting pairing code")
 	case <-time.After(30 * time.Second):
 		log.Println("warning: connection wait timed out; attempting PairPhone anyway")
 	}
