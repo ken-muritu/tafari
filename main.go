@@ -106,6 +106,7 @@ func main() {
 		})
 		registerRoutes()
 		registerOTP()
+		registerDebug()
 		addr := ":" + os.Getenv("PORT")
 		if addr == ":" {
 			addr = ":8080"
