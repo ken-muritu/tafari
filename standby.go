@@ -25,9 +25,49 @@ var (
 	standbyURL  = strings.TrimSpace(os.Getenv("TAFARI_STANDBY_OF"))
 )
 
+// Heartbeat mode, for a primary that is not reachable from the internet (this
+// PC): the primary GETs TAFARI_HEARTBEAT_TO every 15s while WhatsApp is
+// connected; the standby, which has TAFARI_HEARTBEAT_KEY set, stays silent while
+// a beat is under beatTimeout old (counted from boot too) and answers otherwise.
+// The beat doubles as a keep-alive for a sleeping free-tier host.
+const beatTimeout = 45 * time.Second
+
+var (
+	beatKey  = strings.TrimSpace(os.Getenv("TAFARI_HEARTBEAT_KEY"))
+	beatTo   = strings.TrimSpace(os.Getenv("TAFARI_HEARTBEAT_TO"))
+	bootAt   = time.Now()
+	lastBeat atomic.Int64 // unix nanos of the last heartbeat received
+	now      = time.Now
+)
+
 // standbyHolding reports whether this copy should stay silent.
 func standbyHolding() bool {
+	if beatKey != "" {
+		anchor := bootAt
+		if t := time.Unix(0, lastBeat.Load()); t.After(anchor) {
+			anchor = t
+		}
+		return now().Sub(anchor) < beatTimeout
+	}
 	return standbyURL != "" && !primaryDown.Load()
+}
+
+func startHeartbeat() {
+	if beatTo == "" {
+		return
+	}
+	logf("[standby] sending heartbeats")
+	go func() {
+		client := &http.Client{Timeout: 10 * time.Second}
+		for {
+			if cli != nil && cli.Store.ID != nil && cli.IsConnected() {
+				if resp, err := client.Get(beatTo); err == nil {
+					resp.Body.Close()
+				}
+			}
+			time.Sleep(15 * time.Second)
+		}
+	}()
 }
 
 // checkPrimary updates primaryDown from one health-check result.
@@ -46,6 +86,7 @@ func checkPrimary(fails *int, ok bool) {
 }
 
 func startStandbyWatcher() {
+	startHeartbeat()
 	if standbyURL == "" {
 		return
 	}
@@ -80,6 +121,14 @@ func registerRoutes() {
 		key := os.Getenv("TAFARI_LINK_KEY")
 		return key != "" && subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("key")), []byte(key)) == 1
 	}
+	http.HandleFunc("/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		if beatKey == "" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("key")), []byte(beatKey)) != 1 {
+			http.NotFound(w, r)
+			return
+		}
+		lastBeat.Store(now().UnixNano())
+		_, _ = w.Write([]byte("ok"))
+	})
 	http.HandleFunc("/link", func(w http.ResponseWriter, r *http.Request) {
 		if !authed(r) {
 			http.NotFound(w, r)
