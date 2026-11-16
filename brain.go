@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -138,10 +139,20 @@ func ask(chat, userText string, isKen bool) (string, error) {
 
 func askModel(chat, userText string, isKen bool, model string) (string, error) {
 	apiKey := agentKey()
-	if apiKey == "" {
-		return "", fmt.Errorf("no AI key set (AGENT_API_KEY)")
-	}
 	format, base := agentFormat(), agentBaseURL()
+	// "gemini:<model>" uses Google's OpenAI-compatible endpoint with GEMINI_API_KEY,
+	// so a free Gemini quota can sit beside OpenRouter in one AGENT_MODEL list.
+	if name, ok := strings.CutPrefix(model, "gemini:"); ok {
+		model, format = name, "openai"
+		apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+		base = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+		if v := os.Getenv("GEMINI_BASE_URL"); v != "" {
+			base = v
+		}
+	}
+	if apiKey == "" {
+		return "", fmt.Errorf("no AI key set for model %s", model)
+	}
 	sys := systemPrompt(isKen)
 	msgs := []map[string]string{}
 	for _, t := range history(chat) {
