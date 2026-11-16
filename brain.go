@@ -114,12 +114,34 @@ func prefMale(chat string) bool {
 
 // ask sends persona + recent history + the new message to the configured model.
 // Content is never logged; only sizes and status.
+// AGENT_MODEL may be a comma-separated list: free models are often rate
+// limited or return empty text, so each is tried in order until one answers.
 func ask(chat, userText string, isKen bool) (string, error) {
+	var lastErr error
+	for _, m := range strings.Split(agentModel(), ",") {
+		m = strings.TrimSpace(m)
+		if m == "" {
+			continue
+		}
+		text, err := askModel(chat, userText, isKen, m)
+		if err == nil {
+			return text, nil
+		}
+		lastErr = err
+		logf("[brain] model=%s failed, trying next: %v", m, err)
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no AI model set (AGENT_MODEL)")
+	}
+	return "", lastErr
+}
+
+func askModel(chat, userText string, isKen bool, model string) (string, error) {
 	apiKey := agentKey()
 	if apiKey == "" {
 		return "", fmt.Errorf("no AI key set (AGENT_API_KEY)")
 	}
-	format, base, model := agentFormat(), agentBaseURL(), agentModel()
+	format, base := agentFormat(), agentBaseURL()
 	sys := systemPrompt(isKen)
 	msgs := []map[string]string{}
 	for _, t := range history(chat) {
